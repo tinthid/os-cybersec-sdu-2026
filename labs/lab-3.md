@@ -3,62 +3,47 @@
 
 ## วัตถุประสงค์
 
-1. เข้าใจขั้นตอนการแปลง source code (`.c`) เป็น executable ที่รันได้
-2. ใช้คำสั่ง `gcc` แยกขั้นตอน compile และ link ได้
+1. เข้าใจขั้นตอนการแปลง source code (`.c`) เป็น executable
+2. ใช้ `gcc -c` แยก compile กับ link ได้
 3. อธิบายความแตกต่างระหว่าง static linking กับ dynamic linking
-4. ใช้เครื่องมือ `file`, `nm`, `ldd` เพื่อตรวจสอบไฟล์แต่ละขั้นตอน
+4. ใช้เครื่องมือ `file`, `nm`, `ldd` ตรวจสอบไฟล์แต่ละขั้นตอน
 
 ## สิ่งที่ต้องเตรียม
 
-- ระบบ Linux (Ubuntu/Debian) หรือ WSL บน Windows
-- ติดตั้ง gcc และ build tools:
-
 ```bash
-sudo apt install gcc build-essential
+sudo apt install gcc build-essential -y
+mkdir -p ~/lab_linker && cd ~/lab_linker
 ```
 
 ---
 
 ## Part 1 — สร้าง Source Code
 
-### Step 1.1 — สร้างโฟลเดอร์และไฟล์ต่างๆ
+สร้างไฟล์ 3 ไฟล์:
 
-```bash
-mkdir -p ~/lab_linker && cd ~/lab_linker
-```
-
-สร้างไฟล์ `helper.h`:
-
+**helper.h:**
 ```c
-// helper.h
 #ifndef HELPER_H
 #define HELPER_H
 void greet(const char *name);
 #endif
 ```
 
-สร้างไฟล์ `helper.c`:
-
+**helper.c:**
 ```c
-// helper.c
 #include <stdio.h>
-
 void greet(const char *name) {
     printf("Hello, %s!\n", name);
 }
 ```
 
-สร้างไฟล์ `main.c` ที่ใช้ทั้ง math library และ helper:
-
+**main.c:**
 ```c
-// main.c
 #include <stdio.h>
 #include <math.h>
 #include "helper.h"
-
 int main() {
-    double x = 2.0;
-    printf("sqrt(%.1f) = %.4f\n", x, sqrt(x));
+    printf("sqrt(2.0) = %.4f\n", sqrt(2.0));
     greet("Lab Student");
     return 0;
 }
@@ -68,22 +53,21 @@ int main() {
 
 ## Part 2 — Compile: สร้าง Object File
 
-### Step 2.1 — Compile แยกเป็น object file ด้วย flag `-c`
+### Step 2.1 — Compile แยกเป็น object file
 
 ```bash
 gcc -c main.c -o main.o
 gcc -c helper.c -o helper.o
 ```
 
-### Step 2.2 — ตรวจสอบไฟล์ที่ได้
+### Step 2.2 — ตรวจสอบไฟล์
 
 ```bash
-ls -la *.o
 file main.o
 file helper.o
 ```
 
-> **คำถาม 2.1:** คำสั่ง `file main.o` แสดงผลว่าอะไร? ไฟล์ชนิดนี้คืออะไร?
+> **คำถาม 2.1:** `file main.o` แสดงผลว่าอะไร? ไฟล์ชนิดนี้คืออะไร?
 >
 > ```
 > ตอบ:
@@ -97,27 +81,27 @@ file helper.o
 nm main.o
 ```
 
-> **คำถาม 2.2:** ดูผลของ `nm main.o` — สัญลักษณ์ `U` หมายถึงอะไร? ลองหา `sqrt` และ `greet` ในผลลัพธ์แล้วอธิบายว่าทำไมมันเป็น `U`
+> **คำถาม 2.2:** สัญลักษณ์ `U` หน้า `sqrt` และ `greet` หมายถึงอะไร?
+>
+> **Hint:** U = Undefined — symbol ถูกใช้แต่ยังไม่มี definition ในไฟล์นี้
 >
 > ```
 > ตอบ:
 >
 >
 > ```
-
-💡 **Hint:** U = Undefined — หมายถึง symbol ที่ถูกใช้แต่ยังไม่มี definition อยู่ในไฟล์นี้
 
 ---
 
 ## Part 3 — Link: สร้าง Executable
 
-### Step 3.1 — ลอง link โดยไม่ใส่ `-lm` (จะเกิด error)
+### Step 3.1 — ลอง link โดยไม่ใส่ `-lm`
 
 ```bash
 gcc -o main main.o helper.o
 ```
 
-> **คำถาม 3.1:** เกิด error อะไร? ทำไมถึง link ไม่สำเร็จ?
+> **คำถาม 3.1:** เกิด error อะไร? ทำไม link ไม่สำเร็จ?
 >
 > ```
 > ตอบ:
@@ -125,20 +109,14 @@ gcc -o main main.o helper.o
 >
 > ```
 
-### Step 3.2 — Link ให้สมบูรณ์ด้วย `-lm`
+### Step 3.2 — Link ให้สมบูรณ์
 
 ```bash
 gcc -o main main.o helper.o -lm
-```
-
-### Step 3.3 — ตรวจสอบ executable ที่ได้
-
-```bash
 file main
-ls -la main
 ```
 
-> **คำถาม 3.2:** เปรียบเทียบผลของ `file main.o` กับ `file main` — ต่างกันอย่างไร?
+> **คำถาม 3.2:** เปรียบเทียบ `file main.o` กับ `file main` — ต่างกันอย่างไร?
 >
 > ```
 > ตอบ:
@@ -148,9 +126,9 @@ ls -la main
 
 ---
 
-## Part 4 — Dynamic Libraries และ Loader
+## Part 4 — Dynamic vs Static Linking
 
-### Step 4.1 — ดู dynamic dependencies ด้วย `ldd`
+### Step 4.1 — ดู dynamic dependencies
 
 ```bash
 ldd main
@@ -164,16 +142,15 @@ ldd main
 >
 > ```
 
-### Step 4.2 — เปรียบเทียบ Static Linking กับ Dynamic Linking
+### Step 4.2 — เปรียบเทียบ Static กับ Dynamic
 
 ```bash
 gcc -o main_static main.o helper.o -lm -static
 ls -la main main_static
 ldd main_static
-file main_static
 ```
 
-> **คำถาม 4.2:** เปรียบเทียบขนาดของ `main` กับ `main_static` — ทำไม static ถึงใหญ่กว่ามาก?
+> **คำถาม 4.2:** ขนาดของ `main` vs `main_static` ต่างกันแค่ไหน? ทำไม static ถึงใหญ่กว่า?
 >
 > ```
 > ตอบ:
@@ -181,18 +158,14 @@ file main_static
 >
 > ```
 
----
-
-## Part 5 — รันโปรแกรม
-
-### Step 5.1 — รัน executable ทั้งสองแบบ
+### Step 4.3 — รันทั้งสองแบบ
 
 ```bash
 ./main
 ./main_static
 ```
 
-> **คำถาม 5.1:** ผลลัพธ์ของทั้งสองคำสั่งเหมือนกันหรือไม่? อธิบายว่าทำไม
+> **คำถาม 4.3:** ผลลัพธ์เหมือนกันไหม? อธิบายว่าทำไม
 >
 > ```
 > ตอบ:
@@ -202,25 +175,14 @@ file main_static
 
 ---
 
-## Part 6 — ทำทุกขั้นตอนในคำสั่งเดียว
+## Part 5 — สรุป
 
-ปกติเราใช้ `gcc` รวม compile + link ในคำสั่งเดียว:
+### ขั้นตอนทั้งหมด
 
-```bash
-gcc -o main_onestep main.c helper.c -lm
 ```
-
-> **คำถาม 6.1:** คำสั่งนี้ทำอะไรให้เราอัตโนมัติบ้าง? (อ้างอิง Part 2–3)
->
-> ```
-> ตอบ:
->
->
-> ```
-
----
-
-## สรุปขั้นตอน
+  .c  ──compile──►  .o  ──link──►  executable  ──load──►  process
+       (gcc -c)          (gcc -o)                (./main)
+```
 
 | ขั้นตอน | Input | Output | คำสั่ง | ตรวจสอบด้วย |
 |---------|-------|--------|--------|------------|
@@ -228,20 +190,18 @@ gcc -o main_onestep main.c helper.c -lm
 | Link | `.o` + libs | executable | `gcc -o main *.o -lm` | `file`, `nm` |
 | Load & Run | executable | process | `./main` | `ldd` |
 
----
-
-## โจทย์เพิ่มเติม (Bonus)
-
-1. ลองใช้ `gcc -S main.c` เพื่อดู assembly output แล้วเปิดดูด้วย `cat main.s`
-
-2. ลองใช้ `objdump -d main.o` เพื่อดู disassembly ของ object file
-
-3. สร้าง shared library จาก `helper.c`:
+ปกติเราใช้ `gcc` ทำทุกอย่างในคำสั่งเดียว:
 
 ```bash
-gcc -shared -fPIC -o libhelper.so helper.c
-gcc -o main_shared main.c -L. -lhelper -lm
-LD_LIBRARY_PATH=. ./main_shared
+gcc -o main main.c helper.c -lm
 ```
 
-4. ลองใช้ `strace ./main` เพื่อดูว่า loader ทำอะไรบ้างตอนโหลดโปรแกรมเข้า memory
+> **คำถาม 5.1:** คำสั่งข้างบนทำอะไรให้เราอัตโนมัติบ้าง? (อ้างอิง Part 2–4)
+>
+> ```
+> ตอบ:
+>
+>
+> ```
+
+---
