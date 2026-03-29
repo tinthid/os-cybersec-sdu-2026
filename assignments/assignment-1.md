@@ -1,4 +1,4 @@
-# Assignment 1: ทบทวน Lab 1–3
+# Assignment 1: ทบทวน Lab 1–3 [Due Date 11/04/2026]
 ---
 
 ## ข้อ 1 — Boot & Daemon
