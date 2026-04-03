@@ -32,6 +32,6 @@
 
 ## Tips
 
-1. **Section 1** — Focus on definitions, components, and how things work
-2. **Section 2** — Practice answering "why" questions and comparing trade-offs
-3. **Section 3** — Review concepts learned from labs, not just commands
+1. Focus on definitions, components, and how things work
+2. Practice answering "why" questions and comparing trade-offs
+3. Review concepts learned from labs, not just commands
