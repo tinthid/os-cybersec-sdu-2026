@@ -1,5 +1,4 @@
-# Midterm Exam Study Guide — Operating Systems
-## Coverage: Chapter 1-4 + Labs
+# Exam Study Guide — Operating Systems
 ### 20 Questions (Total: 30 Points)
 
 ---
