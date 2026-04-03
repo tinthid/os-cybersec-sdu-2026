@@ -101,7 +101,7 @@ mkdir -p ~/lab_thread && cd ~/lab_thread
 
 ---
 
-## Part 1 — สังเกต Thread ในระบบจริง (30 นาที)
+## Part 1 — สังเกต Thread ในระบบจริง
 
 ### 1.1 ดู thread ของ process จริงด้วย `ps`
 
@@ -255,7 +255,7 @@ done
 
 ---
 
-## Part 2 — Thread Share Memory กัน (พิสูจน์!) (30 นาที)
+## Part 2 — Thread Share Memory กัน (พิสูจน์!)
 
 ### 2.1 ทบทวน: fork() แยก memory
 
@@ -402,7 +402,7 @@ echo "---"
 
 ---
 
-## Part 3 — Race Condition — ปัญหาจากการ Share Memory (30 นาที)
+## Part 3 — Race Condition — ปัญหาจากการ Share Memory
 
 ### ปัญหา Race Condition คืออะไร?
 
@@ -551,7 +551,7 @@ for i in 1 2 3 4 5; do ./race_small; done
 
 ---
 
-## Part 4 — แก้ Race Condition ด้วย Mutex (30 นาที)
+## Part 4 — แก้ Race Condition ด้วย Mutex
 
 ### Mutex คืออะไร?
 
@@ -708,7 +708,7 @@ strace -f -e trace=futex ./race_fixed 2>&1 | tail -20
 
 ---
 
-## Part 5 — Thread vs Process: เปรียบเทียบจากการสังเกต (20 นาที)
+## Part 5 — Thread vs Process: เปรียบเทียบจากการสังเกต
 
 ### 5.1 Benchmark — สร้าง thread เร็วกว่า fork กี่เท่า?
 

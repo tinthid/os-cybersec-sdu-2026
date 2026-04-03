@@ -112,7 +112,7 @@ Process ไม่ได้อยู่ในสถานะเดียวตล
 
 ---
 
-## Part 1 — สำรวจ Process ในระบบ (30 นาที)
+## Part 1 — สำรวจ Process ในระบบ
 
 เราจะเริ่มจากการดู process ที่มีอยู่แล้วในระบบก่อน โดย **ไม่ต้องเขียนโค้ดเลย**
 
@@ -270,7 +270,7 @@ ps aux | wc -l
 
 ---
 
-## Part 2 — สังเกต Process States จริงด้วย Tools (30 นาที)
+## Part 2 — สังเกต Process States จริงด้วย Tools
 
 ในทฤษฎีเราเรียนว่า process มี 5 states — ตอนนี้จะมาสังเกตจริง ๆ ในระบบ
 
@@ -398,7 +398,7 @@ kill <PID>
 
 ---
 
-## Part 3 — fork, exec, wait — เข้าใจผ่าน strace (40 นาที)
+## Part 3 — fork, exec, wait — เข้าใจผ่าน strace
 
 ### Shell ทำงานยังไง?
 
@@ -635,7 +635,7 @@ bash -c "pstree -p $$"
 
 ---
 
-## Part 4 — Zombie และ Orphan Process (30 นาที)
+## Part 4 — Zombie และ Orphan Process
 
 ### Zombie Process คืออะไร?
 
@@ -751,7 +751,7 @@ sleep 4
 
 ---
 
-## Part 5 — IPC: Pipe — จากคำสั่ง Shell ถึงเบื้องหลัง (30 นาที)
+## Part 5 — IPC: Pipe — จากคำสั่ง Shell ถึงเบื้องหลัง
 
 ### ทำไม Process ต้องสื่อสารกัน?
 
