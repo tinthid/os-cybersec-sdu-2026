@@ -92,7 +92,7 @@ pstree -p $$ | head -5
 **2.3)** ในระบบจริง เราใช้ pipe `|` ทุกวัน — รันคำสั่งนี้แล้ววาง output:
 
 ```bash
-strace -f -e trace=clone,pipe,dup2,execve,wait4 bash -c "cat /etc/passwd | grep root | wc -l" 2>&1
+strace -f -e trace=clone,pipe2,dup2,execve,wait4 bash -c "cat /etc/passwd | grep root | wc -l" 2>&1
 ```
 
 จาก output ตอบคำถามต่อไปนี้:
@@ -177,13 +177,54 @@ ps -eLf | awk '{print $2, $6, $NF}' | sort -t' ' -k2 -rn | uniq -f1 | head -5
 >
 > ```
 
-**3.2)** เขียนโปรแกรม C ที่ใช้ `pthread_create()` สร้าง **2 threads** โดย:
-- มี global variable ตัวหนึ่ง
-- thread ตัวที่ 1 **เปลี่ยนค่า** global variable
-- thread ตัวที่ 2 **อ่านค่า** global variable แล้ว print ออกมา
-- main thread ใช้ `pthread_join()` รอทั้ง 2 threads
+**3.2)** พิจารณาโปรแกรม C ด้านล่าง:
 
-วาง **source code** ที่เขียน, **คำสั่ง compile** และ **output** ที่ได้:
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+
+int shared = 0;
+
+void *writer(void *arg) {
+    for (int i = 0; i < 5; i++) {
+        shared++;
+        printf("[writer] shared = %d\n", shared);
+        usleep(100000);
+    }
+    return NULL;
+}
+
+void *reader(void *arg) {
+    for (int i = 0; i < 5; i++) {
+        printf("[reader] shared = %d\n", shared);
+        usleep(100000);
+    }
+    return NULL;
+}
+
+int main() {
+    pthread_t t1, t2;
+    pthread_create(&t1, NULL, writer, NULL);
+    pthread_create(&t2, NULL, reader, NULL);
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    printf("[main] final shared = %d\n", shared);
+    return 0;
+}
+```
+
+Compile แล้วรัน **3 ครั้ง**:
+
+```bash
+gcc -o thread_demo thread_demo.c -pthread
+./thread_demo
+```
+
+วาง output ทั้ง 3 ครั้ง แล้วตอบ:
+- output แต่ละครั้งเหมือนกันหรือไม่? ถ้าไม่ เพราะอะไร?
+- ค่า `shared` สุดท้ายที่ main เห็นเป็นเท่าไหร่? เป็นค่าที่ถูกต้องเสมอหรือไม่?
+- ถ้าต้องการให้ reader อ่านค่าที่ writer เขียนเสร็จแล้วทุกครั้ง ต้องเพิ่มอะไร?
 
 > ```
 > ตอบ:
@@ -191,7 +232,7 @@ ps -eLf | awk '{print $2, $6, $NF}' | sort -t' ' -k2 -rn | uniq -f1 | head -5
 >
 > ```
 
-**3.3)** รันโปรแกรมจากข้อ 3.2 แล้วใช้คำสั่งต่อไปนี้สังเกต (เพิ่ม `sleep()` ในโค้ดเพื่อให้มีเวลาดู):
+**3.3)** รันโปรแกรมจากข้อ 3.2 แล้วใช้คำสั่งต่อไปนี้สังเกต (โค้ดมี `usleep()` อยู่แล้วจึงมีเวลาดู):
 
 ```bash
 ps -T -p <PID>
@@ -211,7 +252,7 @@ ps -T -p <PID>
 **3.4)** ใช้ `strace` ดู system call ที่โปรแกรมจากข้อ 3.2 ใช้สร้าง thread:
 
 ```bash
-strace -f -e trace=clone3,clone ./<program_name> 2>&1 | head -10
+strace -f -e trace=clone3,clone ./thread_demo 2>&1 | head -10
 ```
 
 วาง output แล้วตอบ:
