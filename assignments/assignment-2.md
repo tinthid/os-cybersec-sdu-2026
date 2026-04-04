@@ -35,19 +35,7 @@ lsmod | head -20
 >
 > ```
 
-**1.3)** ในแลปเราเห็นว่า keycount module ใช้ `atomic_inc()` แทน `count++` ธรรมดา
-
-สมมุติว่ามี 2 CPU core กำลังประมวลผล keyboard interrupt พร้อมกัน — วาด **timeline** แสดงว่าถ้าใช้ `count++` ธรรมดาจะเกิดปัญหาอะไร (วาดคล้ายตาราง race condition ใน Lab 6)
-
-จากนั้นอธิบายว่า `atomic_inc()` แก้ปัญหานี้ได้อย่างไร
-
-> ```
-> ตอบ:
->
->
-> ```
-
-**1.4)** เปรียบเทียบ 3 ช่องทางที่ kernel module ใช้สื่อสารกับ user space:
+**1.3)** เปรียบเทียบ 3 ช่องทางที่ kernel module ใช้สื่อสารกับ user space:
 
 | วิธี | ตัวอย่าง | ข้อดี | ข้อจำกัด |
 |---|---|---|---|
@@ -170,7 +158,7 @@ sleep 4
 
 ---
 
-## ข้อ 3 — Thread & Race Condition (Lab 6)
+## ข้อ 3 — Thread & Concurrency (Lab 6)
 
 **3.1)** รันคำสั่งนี้:
 
@@ -189,66 +177,13 @@ ps -eLf | awk '{print $2, $6, $NF}' | sort -t' ' -k2 -rn | uniq -f1 | head -5
 >
 > ```
 
-**3.2)** ทดลองรันโค้ด 2 เวอร์ชัน แล้วสังเกตผลลัพธ์:
+**3.2)** เขียนโปรแกรม C ที่ใช้ `pthread_create()` สร้าง **2 threads** โดย:
+- มี global variable ตัวหนึ่ง
+- thread ตัวที่ 1 **เปลี่ยนค่า** global variable
+- thread ตัวที่ 2 **อ่านค่า** global variable แล้ว print ออกมา
+- main thread ใช้ `pthread_join()` รอทั้ง 2 threads
 
-**เวอร์ชัน A — ไม่มี mutex (มี bug)**
-
-สร้างไฟล์ `bank_bug.c`:
-
-```c
-#include <stdio.h>
-#include <pthread.h>
-#include <unistd.h>
-
-int balance = 1000;
-
-void *withdraw(void *arg) {
-    int amount = *(int *)arg;
-    if (balance >= amount) {
-        usleep(1);  // จำลอง delay
-        balance -= amount;
-        printf("Withdrew %d, balance = %d\n", amount, balance);
-    } else {
-        printf("Insufficient funds!\n");
-    }
-    return NULL;
-}
-
-int main() {
-    pthread_t t1, t2;
-    int amt1 = 800, amt2 = 500;
-
-    pthread_create(&t1, NULL, withdraw, &amt1);
-    pthread_create(&t2, NULL, withdraw, &amt2);
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
-
-    printf("Final balance = %d\n", balance);
-    return 0;
-}
-```
-
-```bash
-gcc bank_bug.c -o bank_bug -lpthread
-```
-
-รัน **5 ครั้ง** แล้ววาง output ทั้ง 5 ครั้ง:
-
-```bash
-./bank_bug
-./bank_bug
-./bank_bug
-./bank_bug
-./bank_bug
-```
-
-> ```
-> ตอบ (วาง output 5 ครั้ง):
->
->
-> ```
-
-**(a)** จาก output ทั้ง 5 ครั้ง — balance ติดลบบ้างไหม? ทั้ง 2 thread ถอนเงินสำเร็จทั้งคู่หรือเปล่า? (ทั้งที่เงินมีแค่ 1000 แต่ถอน 800 + 500 = 1300)
+วาง **source code** ที่เขียน, **คำสั่ง compile** และ **output** ที่ได้:
 
 > ```
 > ตอบ:
@@ -256,67 +191,32 @@ gcc bank_bug.c -o bank_bug -lpthread
 >
 > ```
 
-**เวอร์ชัน B — มี mutex (แก้ bug แล้ว)**
-
-สร้างไฟล์ `bank_fixed.c`:
-
-```c
-#include <stdio.h>
-#include <pthread.h>
-#include <unistd.h>
-
-int balance = 1000;
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
-void *withdraw(void *arg) {
-    int amount = *(int *)arg;
-    pthread_mutex_lock(&lock);
-    if (balance >= amount) {
-        usleep(1);
-        balance -= amount;
-        printf("Withdrew %d, balance = %d\n", amount, balance);
-    } else {
-        printf("Insufficient funds!\n");
-    }
-    pthread_mutex_unlock(&lock);
-    return NULL;
-}
-
-int main() {
-    pthread_t t1, t2;
-    int amt1 = 800, amt2 = 500;
-
-    pthread_create(&t1, NULL, withdraw, &amt1);
-    pthread_create(&t2, NULL, withdraw, &amt2);
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
-
-    printf("Final balance = %d\n", balance);
-    return 0;
-}
-```
+**3.3)** รันโปรแกรมจากข้อ 3.2 แล้วใช้คำสั่งต่อไปนี้สังเกต (เพิ่ม `sleep()` ในโค้ดเพื่อให้มีเวลาดู):
 
 ```bash
-gcc bank_fixed.c -o bank_fixed -lpthread
+ps -T -p <PID>
 ```
 
-รัน **5 ครั้ง** แล้ววาง output ทั้ง 5 ครั้ง:
+วาง output แล้วตอบ:
+- thread ทั้งหมดมี PID เหมือนกันหรือไม่?
+- SPID (Thread ID) ต่างกันหรือไม่?
+- ผลลัพธ์นี้สอดคล้องกับที่เรียนในแลปอย่างไร?
+
+> ```
+> ตอบ:
+>
+>
+> ```
+
+**3.4)** ใช้ `strace` ดู system call ที่โปรแกรมจากข้อ 3.2 ใช้สร้าง thread:
 
 ```bash
-./bank_fixed
-./bank_fixed
-./bank_fixed
-./bank_fixed
-./bank_fixed
+strace -f -e trace=clone3,clone ./<program_name> 2>&1 | head -10
 ```
 
-> ```
-> ตอบ (วาง output 5 ครั้ง):
->
->
-> ```
-
-**(b)** เปรียบเทียบผลลัพธ์ของเวอร์ชัน A กับ B — อะไรต่างกัน? เวอร์ชัน B ยังมี balance ติดลบไหม?
+วาง output แล้วตอบ:
+- `pthread_create()` ใช้ system call อะไรภายใน?
+- มี CLONE flags อะไรบ้าง? flag ไหนที่ทำให้ thread share memory กัน?
 
 > ```
 > ตอบ:
@@ -324,21 +224,7 @@ gcc bank_fixed.c -o bank_fixed -lpthread
 >
 > ```
 
-**(c)** เปรียบเทียบโค้ดเวอร์ชัน A กับ B — มีบรรทัดไหนที่เพิ่มเข้ามาบ้าง? บรรทัดที่เพิ่มมาทำหน้าที่อะไร?
-
-> ```
-> ตอบ:
->
->
-> ```
-
-> ```
-> ตอบ:
->
->
-> ```
-
-**3.3)** เปรียบเทียบ `fork()` กับ `pthread_create()` ในตารางด้านล่าง:
+**3.5)** เปรียบเทียบ `fork()` กับ `pthread_create()` ในตารางด้านล่าง:
 
 | หัวข้อ | `fork()` | `pthread_create()` |
 |---|---|---|
@@ -440,33 +326,11 @@ int main() {
 >
 > ```
 
-**5.2)** จากโค้ดด้านล่าง **trace การทำงาน** ทีละบรรทัด:
+**5.2)** สมมุติว่ามีโปรแกรม multithreaded ที่สร้าง 3 worker threads แล้วเรียก `fork()` จาก main thread
 
-```c
-int x = 0;
-
-void *inc(void *arg) {
-    for (int i = 0; i < 3; i++) x++;
-    return NULL;
-}
-
-int main() {
-    pthread_t t1, t2;
-    pthread_create(&t1, NULL, inc, NULL);
-    pthread_create(&t2, NULL, inc, NULL);
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
-    printf("x = %d\n", x);
-    return 0;
-}
-```
-
-**(a)** ถ้าไม่มี race condition ค่า x สุดท้ายควรเป็นเท่าไหร่?
-
-**(b)** ค่า x สุดท้ายที่ **น้อยที่สุด** ที่เป็นไปได้คือเท่าไหร่? วาด timeline (interleaving) ที่ทำให้ได้ค่านั้น
-(Hint: พิจารณาว่า `x++` เป็น 3 ขั้นตอน: LOAD, ADD, STORE)
-
-**(c)** ถ้าเพิ่ม mutex ครอบ `x++` ค่า x สุดท้ายจะเป็นเท่าไหร่เสมอ? ทำไม?
+- Child process จะมีกี่ thread? อธิบายว่าทำไม
+- ถ้า child เรียก `exec()` ต่อ จะเกิดอะไรกับ thread ที่เหลือ?
+- วาดแผนภาพแสดงจำนวน thread ใน parent กับ child **ก่อน** และ **หลัง** fork
 
 > ```
 > ตอบ:
