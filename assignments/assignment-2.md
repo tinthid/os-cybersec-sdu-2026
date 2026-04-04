@@ -171,18 +171,18 @@ ps -eLf | awk '{print $2, $6, $NF}' | sort -t' ' -k2 -rn | uniq -f1 | head -5
 int shared = 0;
 
 void *writer(void *arg) {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 15; i++) {
         shared++;
         printf("[writer] shared = %d\n", shared);
-        usleep(100000);
+        sleep(2);
     }
     return NULL;
 }
 
 void *reader(void *arg) {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 15; i++) {
         printf("[reader] shared = %d\n", shared);
-        usleep(100000);
+        sleep(2);
     }
     return NULL;
 }
@@ -191,8 +191,7 @@ int main() {
     pthread_t t1, t2;
     pthread_create(&t1, NULL, writer, NULL);
     pthread_create(&t2, NULL, reader, NULL);
-    printf("PID = %d, sleeping 15s — run: ps -T -p %d\n", getpid(), getpid());
-    sleep(15);
+    printf("PID = %d — run: ps -T -p %d\n", getpid(), getpid());
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
     printf("[main] final shared = %d\n", shared);
