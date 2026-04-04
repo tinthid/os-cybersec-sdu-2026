@@ -191,6 +191,8 @@ int main() {
     pthread_t t1, t2;
     pthread_create(&t1, NULL, writer, NULL);
     pthread_create(&t2, NULL, reader, NULL);
+    printf("PID = %d, sleeping 15s — run: ps -T -p %d\n", getpid(), getpid());
+    sleep(15);
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
     printf("[main] final shared = %d\n", shared);
@@ -207,8 +209,7 @@ gcc -o thread_demo thread_demo.c -pthread
 
 วาง output ทั้ง 3 ครั้ง แล้วตอบ:
 - output แต่ละครั้งเหมือนกันหรือไม่? ถ้าไม่ เพราะอะไร?
-- ค่า `shared` สุดท้ายที่ main เห็นเป็นเท่าไหร่? เป็นค่าที่ถูกต้องเสมอหรือไม่?
-- ถ้าต้องการให้ reader อ่านค่าที่ writer เขียนเสร็จแล้วทุกครั้ง ต้องเพิ่มอะไร?
+- ค่า `shared` สุดท้ายที่ main เห็นเป็นเท่าไหร่? ทำไมค่าสุดท้ายถึงเท่ากันทุกครั้ง ทั้งที่ output ระหว่างทางต่างกัน?
 
 > ```
 > ตอบ:
