@@ -8,7 +8,7 @@
 3. เข้าใจ process states และสังเกตได้จาก `/proc`
 4. เข้าใจ `fork()`, `exec()`, `wait()` ผ่าน snippet เล็ก ๆ และ `strace`
 5. เข้าใจปัญหา zombie process
-6. เข้าใจ IPC (pipe) จากคำสั่ง shell ที่ใช้กันทุกวัน
+6. เข้าใจ Signal — วิธีที่ OS และ process สื่อสารกัน
 
 ---
 
@@ -699,71 +699,82 @@ ps aux | grep Z | grep -v grep
 
 ---
 
-## Part 5 — IPC: Pipe — จากคำสั่ง Shell ถึงเบื้องหลัง
+## Part 5 — Signal — วิธีที่ OS และ Process สื่อสารกัน
 
-### ทำไม Process ต้องสื่อสารกัน?
+### Signal คืออะไร?
 
-Process แต่ละตัวมี **memory แยกกัน** (เราพิสูจน์แล้วใน Part 3) จะส่งข้อมูลหากันได้ยังไง?
-
-คำตอบคือ **IPC (Interprocess Communication)** — มีหลายวิธี แต่วิธีที่ใช้บ่อยที่สุดในชีวิตประจำวันคือ **pipe**
-
-### Pipe คืออะไร?
-
-Pipe เหมือน **ท่อน้ำ** ที่มี 2 ปลาย:
+Signal คือ **การแจ้งเตือนแบบ asynchronous** ที่ส่งให้ process — เหมือน "แตะไหล่" บอกว่ามีเหตุการณ์เกิดขึ้น
 
 ```
-  Process A                              Process B
-  (writer)                               (reader)
-     │                                      │
-     │   write(fd[1], data)                 │
-     └────────────→ ┌────────┐ ────────────→│
-                    │  PIPE  │              │
-                    │ (buffer│   read(fd[0], buf)
-                    │  ใน    │
-                    │ kernel)│
-                    └────────┘
+  Kernel / Process อื่น
+         │
+         │  ส่ง signal (เช่น SIGTERM)
+         ▼
+  ┌─────────────┐
+  │   Process   │ ←── กำลังทำงานอยู่ ถูกขัดจังหวะ!
+  │             │
+  │  3 ทางเลือก: │
+  │  1. ทำ default action (เช่น terminate)
+  │  2. จัดการเอง (signal handler)
+  │  3. เพิกเฉย (ignore)
+  └─────────────┘
 ```
 
-ข้อมูลไหลได้ **ทิศทางเดียว** (unidirectional) เท่านั้น
+### 5.1 Signal ที่เจอบ่อย
 
-### 5.1 เราใช้ pipe ทุกวันอยู่แล้ว!
+| Signal | เลข | Default Action | เกิดเมื่อไหร่ |
+|---|---|---|---|
+| `SIGINT` | 2 | terminate | กด **Ctrl+C** |
+| `SIGTSTP` | 20 | stop (pause) | กด **Ctrl+Z** |
+| `SIGCONT` | 18 | continue | ใช้ `fg` หรือ `bg` |
+| `SIGTERM` | 15 | terminate | `kill PID` (default) |
+| `SIGKILL` | 9 | terminate | `kill -9 PID` (**จัดการเองไม่ได้!**) |
+| `SIGCHLD` | 17 | ignore | child process terminate |
+| `SIGSEGV` | 11 | terminate + core dump | เข้าถึง memory ที่ไม่ได้รับอนุญาต |
 
-ทุกครั้งที่พิมพ์ `|` ใน terminal เราใช้ pipe:
+### 5.2 ทดลองส่ง signal
 
+เปิด process ที่รันค้างไว้ แล้วส่ง signal จาก terminal อื่น:
+
+**Terminal 1:**
 ```bash
-ls -la | grep ".c" | wc -l
+sleep 300
 ```
 
-คำสั่งนี้สร้าง 3 process กับ 2 pipe:
-
-```
-  ls -la ─── pipe1 ───→ grep ".c" ─── pipe2 ───→ wc -l
-```
-
-ลองดูจำนวน process ที่เกิดขึ้น:
-
+**Terminal 2:**
 ```bash
-echo "Shell PID = $$"
-ps --forest -o pid,ppid,cmd -g $$
+# ดู PID ของ sleep
+ps aux | grep "sleep 300"
+
+# ส่ง SIGTERM (ขอให้จบแบบดี ๆ)
+kill <PID>
 ```
 
-### 5.2 pipe มี buffer ขนาดจำกัด
+> **สังเกต:** `sleep` ใน terminal 1 จะจบทันที
 
-pipe ใน kernel มี buffer (ปกติ **65536 bytes** หรือ 64 KB) ลองตรวจสอบ:
+ลองอีกรอบ แต่คราวนี้ใช้ `SIGSTOP` กับ `SIGCONT`:
 
+**Terminal 1:**
 ```bash
-# ดูขนาด pipe buffer ในระบบ
-cat /proc/sys/fs/pipe-max-size
+# นับเลขไปเรื่อย ๆ
+for i in $(seq 1 100); do echo $i; sleep 1; done
 ```
 
-ลองส่งข้อมูลจำนวนมากผ่าน pipe แล้วดูว่าเกิดอะไร:
-
+**Terminal 2:**
 ```bash
-# สร้างข้อมูล 100KB แล้วส่งผ่าน pipe
-dd if=/dev/zero bs=1024 count=100 2>/dev/null | wc -c
+# หา PID
+ps aux | grep "seq 1 100"
+
+# หยุดชั่วคราว
+kill -STOP <PID>
+# สังเกต: terminal 1 หยุดนับ
+
+# ให้ทำงานต่อ
+kill -CONT <PID>
+# สังเกต: terminal 1 นับต่อจากเดิม
 ```
 
-> **คำถาม 5.1:** pipe buffer มีขนาดกี่ bytes? ถ้า writer เขียนเร็วกว่าที่ reader อ่าน จนกว่า buffer จะเต็ม จะเกิดอะไรขึ้น?
+> **คำถาม 5.1:** `SIGSTOP` ต่างจาก `SIGTSTP` อย่างไร? อันไหนที่ process สามารถเพิกเฉย (ignore) ได้?
 >
 > ```
 > ตอบ:
@@ -771,20 +782,13 @@ dd if=/dev/zero bs=1024 count=100 2>/dev/null | wc -c
 >
 > ```
 
-### 5.3 ดูเบื้องหลังของ `|` ด้วย strace
+### 5.3 ดู signal ด้วย strace
 
 ```bash
-strace -f -e trace=pipe,clone,dup2,execve,read,write bash -c "echo hello | cat" 2>&1 | head -40
+strace -f -e trace=signal bash -c "sleep 1; true" 2>&1
 ```
 
-> **สังเกต:** จะเห็นลำดับ:
-> 1. `pipe([3, 4])` — สร้าง pipe (read end = fd 3, write end = fd 4)
-> 2. `clone(...)` — สร้าง child process
-> 3. `dup2(4, 1)` — redirect stdout (fd 1) ไปที่ pipe write end (fd 4)
-> 4. `dup2(3, 0)` — redirect stdin (fd 0) มาจาก pipe read end (fd 3)
-> 5. `execve(...)` — โหลดโปรแกรม
-
-> **คำถาม 5.2:** `dup2(4, 1)` หมายความว่าอะไร? ทำไม `echo` ถึงส่ง output เข้า pipe ได้ ทั้ง ๆ ที่ `echo` ไม่รู้จัก pipe?
+> **คำถาม 5.2:** เห็น signal อะไรบ้างใน output? signal นั้นเกิดจากอะไร?
 >
 > ```
 > ตอบ:
@@ -792,56 +796,31 @@ strace -f -e trace=pipe,clone,dup2,execve,read,write bash -c "echo hello | cat" 
 >
 > ```
 
-### 5.4 Named pipe (FIFO) — pipe ที่อยู่เป็นไฟล์
+### 5.4 Signal ที่จัดการไม่ได้
 
-ปกติ pipe `|` ใช้ได้เฉพาะระหว่าง parent-child แต่ **named pipe** สร้างเป็นไฟล์ได้ ให้ process ไหนก็ได้เขียน/อ่าน:
+บาง signal process **ไม่สามารถ** ignore หรือจัดการเองได้:
 
-```bash
-# สร้าง named pipe
-mkfifo /tmp/my_pipe
-ls -la /tmp/my_pipe
-```
-
-> **สังเกต:** ไฟล์มี type `p` (pipe) แทนที่จะเป็น `-` (regular file)
-
-เปิด terminal 2 หน้าต่าง:
-
-**Terminal 1 (reader):**
-```bash
-cat /tmp/my_pipe
-# จะ block รอจนกว่ามีคนเขียน...
-```
-
-**Terminal 2 (writer):**
-```bash
-echo "Hello from terminal 2!" > /tmp/my_pipe
-```
-
-> **สังเกต:** พอพิมพ์ echo ใน terminal 2 → ข้อความปรากฏใน terminal 1 ทันที!
+| Signal | จัดการเองได้? | ทำไม? |
+|---|---|---|
+| `SIGTERM` | ได้ | ให้ process cleanup ก่อนจบ |
+| `SIGKILL` | **ไม่ได้** | OS ต้องมีทางฆ่า process ได้เสมอ |
+| `SIGSTOP` | **ไม่ได้** | OS ต้องมีทางหยุด process ได้เสมอ |
 
 ```bash
-# ลบ named pipe เมื่อเสร็จ
-rm /tmp/my_pipe
+# ทดลอง: trap ใช้ดัก signal ได้
+bash -c 'trap "echo caught SIGTERM" SIGTERM; echo "PID=$$"; sleep 30' &
+BGPID=$!
+sleep 1
+
+# ส่ง SIGTERM — process จะดักได้
+kill -TERM $BGPID
+sleep 1
+
+# ส่ง SIGKILL — process ดักไม่ได้ ตายแน่นอน
+kill -KILL $BGPID
 ```
 
-> **คำถาม 5.3:** named pipe ต่างจาก pipe ปกติ (`|`) อย่างไร? มีข้อดีอะไร?
->
-> ```
-> ตอบ:
->
->
-> ```
-
-### 5.5 เปรียบเทียบ IPC วิธีต่าง ๆ
-
-| วิธี IPC | ความเร็ว | ทิศทาง | ข้อจำกัด | ตัวอย่าง |
-|---|---|---|---|---|
-| **Pipe** (`\|`) | ปานกลาง | ทิศเดียว | parent-child เท่านั้น | `ls \| grep` |
-| **Named Pipe** (FIFO) | ปานกลาง | ทิศเดียว | process ไหนก็ได้ | server ↔ client |
-| **Shared Memory** | **เร็วมาก** | อ่าน/เขียนทั้งคู่ | ต้อง sync เอง | database shared cache |
-| **Signal** | เร็ว | ทิศเดียว | ส่งได้แค่เลข | `kill -9 PID` |
-
-> **คำถาม 5.4:** ถ้าต้องส่งข้อมูลขนาดใหญ่ (เช่น ไฟล์ 1 GB) ระหว่าง 2 process ควรใช้ IPC วิธีไหน? ทำไม?
+> **คำถาม 5.3:** ทำไม OS ถึงออกแบบให้ `SIGKILL` จัดการเองไม่ได้? ถ้าทุก signal จัดการเองได้หมด จะเกิดปัญหาอะไร?
 >
 > ```
 > ตอบ:
@@ -862,8 +841,11 @@ rm /tmp/my_pipe
 | `pstree -p` | แสดง process tree พร้อม PID |
 | `top` | ดู process แบบ real-time |
 | `strace -f -e trace=...` | ดู system call ของ process |
-| `kill PID` | ส่ง signal ให้ process |
-| `mkfifo` | สร้าง named pipe |
+| `kill PID` | ส่ง SIGTERM ให้ process |
+| `kill -9 PID` | ส่ง SIGKILL ให้ process |
+| `kill -STOP PID` | หยุด process ชั่วคราว |
+| `kill -CONT PID` | ให้ process ทำงานต่อ |
+| `trap` | ดัก signal ใน shell script |
 | `/proc/<PID>/status` | ข้อมูลสถานะของ process |
 | `/proc/<PID>/maps` | memory map ของ process |
 
@@ -875,8 +857,8 @@ rm /tmp/my_pipe
 | `exec()` | โหลดโปรแกรมใหม่ทับ process ปัจจุบัน |
 | `wait()` | parent รอ child terminate + เก็บ exit status |
 | `exit()` | จบ process พร้อมส่ง exit status |
-| `pipe()` | สร้าง pipe สำหรับ IPC |
-| `dup2()` | redirect file descriptor |
+| `kill()` | ส่ง signal ให้ process |
+| `signal()` / `sigaction()` | กำหนด signal handler |
 | `getpid()` / `getppid()` | ดู PID ของตัวเอง / parent |
 
 ---
@@ -891,6 +873,5 @@ rm /tmp/my_pipe
 4. `fork()` สร้าง child ที่ได้ **copy** ของ memory — parent กับ child แก้ค่ากันไม่กระทบ
 5. `exec()` **แทนที่** memory ทั้งหมดด้วยโปรแกรมใหม่ — ถ้าสำเร็จจะไม่ return
 6. **Zombie** = child ตายแล้ว parent ไม่เรียก wait() → กิน PID slot
-7. **Orphan** = parent ตายก่อน → systemd (PID 1) รับเลี้ยงอัตโนมัติ
-8. **Pipe** คือ IPC แบบท่อทิศทางเดียว — เราใช้มันทุกวันผ่าน `|` ใน shell
-9. `strace` เป็นเครื่องมือทรงพลังสำหรับดู system call เบื้องหลังทุกคำสั่ง
+7. **Signal** คือการสื่อสารแบบ asynchronous ระหว่าง OS/process — บาง signal (SIGKILL, SIGSTOP) จัดการเองไม่ได้
+8. `strace` เป็นเครื่องมือทรงพลังสำหรับดู system call เบื้องหลังทุกคำสั่ง
