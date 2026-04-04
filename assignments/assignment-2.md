@@ -55,10 +55,12 @@ lsmod | head -20
 
 ## ข้อ 2 — Process Observation & Analysis (Lab 5)
 
-**2.1)** รันคำสั่งต่อไปนี้แล้ววาง output:
+**2.1)** ก่อนรัน — ลองเปิดโปรแกรมให้เยอะหน่อย เช่น browser หลาย tab, เปิดเพลง, หรือรัน `stress --cpu 2 --timeout 30 &` เพื่อให้มี process ที่ใช้ CPU จริงๆ ให้วิเคราะห์
+
+จากนั้นรันคำสั่งนี้แล้ววาง output:
 
 ```bash
-ps aux --sort=-%cpu | head -10
+top -bn1 | head -15
 ```
 
 จาก output:
