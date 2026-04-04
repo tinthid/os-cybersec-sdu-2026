@@ -336,10 +336,10 @@ ps aux | grep "sleep 60" | grep -v grep
 >
 > ```
 
-ลองใช้ `fg` เพื่อให้ process กลับมาทำงาน:
+หลังจากกด `Ctrl+Z` process จะถูก suspend และเราจะได้ prompt กลับมา — ลองใช้ `fg` เพื่อดึง process กลับมาทำงานต่อใน foreground:
 
 ```bash
-# ใน terminal 1:
+# ใน terminal 1 (หลังกด Ctrl+Z แล้ว):
 fg
 ```
 
