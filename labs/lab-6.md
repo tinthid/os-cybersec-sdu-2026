@@ -6,8 +6,8 @@
 1. เข้าใจแนวคิด Thread ว่าต่างจาก Process อย่างไร
 2. สังเกต thread จริงในระบบด้วย `ps`, `htop`, `/proc`
 3. เห็นว่า thread **share memory** กัน (ต่างจาก process ที่แยกกัน)
-4. เห็นปัญหา **race condition** ด้วยตาตัวเอง
-5. เข้าใจวิธีแก้ด้วย **mutex** และ trade-off ที่ตามมา
+4. เข้าใจ Threading Issues — พฤติกรรมของ **fork()** และ **signal** ใน multithreaded program
+5. สังเกต **clone()** system call ที่ Linux ใช้สร้าง thread จริง ๆ
 
 ---
 
@@ -82,7 +82,7 @@ mkdir -p ~/lab_thread && cd ~/lab_thread
 - **Heap** — memory ที่ malloc มาใช้ร่วมกัน
 - **Open files** — ไฟล์ที่เปิดอยู่
 
-> **จุดสำคัญ:** การที่ thread share data กัน ทำให้สื่อสารง่ายมาก (แค่อ่าน/เขียน global variable) แต่ก็เป็นต้นเหตุของ **race condition** ที่เราจะเจอใน Part 3
+> **จุดสำคัญ:** การที่ thread share data กัน ทำให้สื่อสารง่ายมาก (แค่อ่าน/เขียน global variable) แต่ก็ทำให้เกิดปัญหาได้ถ้าหลาย thread แก้ข้อมูลพร้อมกัน (จะเรียนเพิ่มใน Chapter 6-7)
 
 ### Thread vs Process — เปรียบเทียบ
 
@@ -97,7 +97,7 @@ mkdir -p ~/lab_thread && cd ~/lab_thread
 
 > **เปรียบเทียบง่าย ๆ:**
 > - **Process** เหมือน **บ้านแยกหลัง** — แต่ละหลังมีห้องครัว ห้องนอน ห้องน้ำของตัวเอง จะส่งของให้กันต้องส่งพัสดุ (IPC)
-> - **Thread** เหมือน **คนหลายคนอยู่บ้านเดียวกัน** — ใช้ห้องครัว ห้องนั่งเล่นร่วมกัน แต่มีเตียงนอน (stack) ของตัวเอง ส่งของให้กันแค่วางไว้บนโต๊ะ (shared variable) แต่ต้องระวังอย่าใช้ห้องน้ำพร้อมกัน (race condition!)
+> - **Thread** เหมือน **คนหลายคนอยู่บ้านเดียวกัน** — ใช้ห้องครัว ห้องนั่งเล่นร่วมกัน แต่มีเตียงนอน (stack) ของตัวเอง ส่งของให้กันแค่วางไว้บนโต๊ะ (shared variable)
 
 ---
 
@@ -402,127 +402,110 @@ echo "---"
 
 ---
 
-## Part 3 — Race Condition — ปัญหาจากการ Share Memory
+## Part 3 — Threading Issues: fork() กับ Signal ใน Multithreaded Program
 
-### ปัญหา Race Condition คืออะไร?
+ใน Lab 5 เราเรียนเรื่อง `fork()`, `exec()` และ **signal** ไปแล้ว — แต่ตอนนั้นเป็น single-threaded program พอเป็น **multithreaded** จะมีคำถามสำคัญที่ต้องรู้:
 
-ใน Part 2 เราเห็นแล้วว่า thread share global variable กัน — ฟังดูสะดวกดี แต่มัน **มีปัญหาร้ายแรง** ที่ซ่อนอยู่
+- ถ้า process มีหลาย thread แล้ว **fork()** จะ copy ทุก thread หรือแค่ thread ที่เรียก?
+- **Signal** จะถูกส่งไปที่ thread ไหน?
 
-### ทำไม `counter++` ถึงไม่ปลอดภัย?
+### 3.1 fork() ใน multithreaded program
 
-เราอาจคิดว่า `counter++` เป็นคำสั่งเดียว แต่ CPU จริง ๆ ทำ **3 ขั้นตอน**:
-
-```
-  C code:     counter++;
-
-  Machine:    1. LOAD  register ← counter    (อ่านค่าจาก memory ใส่ register)
-              2. ADD   register ← register + 1  (บวก 1)
-              3. STORE counter ← register     (เขียนค่ากลับ memory)
-```
-
-ถ้ามี 2 thread ทำ `counter++` พร้อมกัน อาจเกิดเหตุการณ์แบบนี้:
+**กฎของ Linux:** เมื่อเรียก `fork()` ใน multithreaded program **child process จะมีแค่ 1 thread** คือ thread ที่เรียก `fork()` เท่านั้น — thread อื่น ๆ **จะหายไปหมด**!
 
 ```
-  สมมุติ counter = 5
-
-  Thread A                          Thread B
-  ──────────────────               ──────────────────
-  1. LOAD register_A = 5
-                                   1. LOAD register_B = 5
-  2. ADD  register_A = 6
-                                   2. ADD  register_B = 6
-  3. STORE counter = 6
-                                   3. STORE counter = 6
-
-  ผลลัพธ์: counter = 6   ← ควรเป็น 7!  (++ สองครั้ง ได้แค่ +1)
+  Parent process (3 threads)            Child process (1 thread)
+  ┌──────────────────────┐              ┌──────────────────────┐
+  │  Thread 1 (main)     │   fork()     │  Thread 1 (main)     │
+  │  Thread 2 (worker)   │  ───────►    │                      │
+  │  Thread 3 (worker)   │              │  Thread 2, 3 หายไป!  │
+  └──────────────────────┘              └──────────────────────┘
 ```
 
-Thread B อ่านค่าเก่า (5) ก่อนที่ Thread A จะเขียนค่าใหม่ (6) กลับ ผลคือการ ++ ของ Thread A **หายไป**!
-
-นี่เรียกว่า **race condition** — ผลลัพธ์ขึ้นอยู่กับ "ใครถึงก่อน" ซึ่งเปลี่ยนไปทุกครั้งที่รัน
-
-### 3.1 เห็น race condition ด้วยตาตัวเอง
-
-สร้างไฟล์ `race.c`:
+สร้างไฟล์ `thread_fork.c` เพื่อพิสูจน์:
 
 ```c
 #include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
-#define ITERATIONS 1000000
-
-int counter = 0;  /* จุดเกิดเหตุ! */
-
-void *increment(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++)
-        counter++;
-    return NULL;
-}
-
-void *decrement(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++)
-        counter--;
+void *worker(void *arg) {
+    int id = *(int *)arg;
+    printf("[Parent] Thread %d running (tid=%lu)\n", id, pthread_self());
+    sleep(10);
     return NULL;
 }
 
 int main() {
-    pthread_t t1, t2;
+    pthread_t t[2];
+    int ids[] = {1, 2};
 
-    printf("Expected: 0 (++ and -- cancel out)\n");
+    /* สร้าง 2 worker threads ใน parent */
+    for (int i = 0; i < 2; i++)
+        pthread_create(&t[i], NULL, worker, &ids[i]);
 
-    pthread_create(&t1, NULL, increment, NULL);
-    pthread_create(&t2, NULL, decrement, NULL);
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
+    sleep(1);  /* รอให้ thread เริ่มทำงาน */
 
-    printf("Actual:   %d\n", counter);
-    printf("Result:   %s\n", counter == 0 ? "CORRECT" : "WRONG — race condition!");
+    printf("\n[Parent] PID=%d, threads in parent:\n", getpid());
+    fflush(stdout);
+
+    /* นับ thread ของ parent */
+    char path[64];
+    int count = 0;
+    sprintf(path, "/proc/%d/task", getpid());
+    FILE *fp = popen("ls /proc/self/task | wc -l", "r");
+    if (fp) { fscanf(fp, "%d", &count); pclose(fp); }
+    printf("  Thread count: %d\n", count);
+
+    /* fork! */
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        /* child process */
+        printf("\n[Child]  PID=%d, threads in child:\n", getpid());
+        fflush(stdout);
+
+        count = 0;
+        fp = popen("ls /proc/self/task | wc -l", "r");
+        if (fp) { fscanf(fp, "%d", &count); pclose(fp); }
+        printf("  Thread count: %d\n", count);
+
+        printf("[Child]  Only the thread that called fork() survives!\n");
+        _exit(0);
+    }
+
+    wait(NULL);
+
+    for (int i = 0; i < 2; i++)
+        pthread_join(t[i], NULL);
     return 0;
 }
 ```
 
 ```bash
-gcc -Wall race.c -o race -lpthread
-```
-
-**ลองรัน 5 ครั้งแล้วจดผลลัพธ์:**
-
-```bash
-for i in 1 2 3 4 5; do echo "--- Run $i ---"; ./race; done
+gcc -Wall thread_fork.c -o thread_fork -lpthread
+./thread_fork
 ```
 
 ตัวอย่างผลลัพธ์:
 
 ```
-Expected: 0
-Actual:   -34521
-Result:   WRONG — race condition!
+[Parent] Thread 1 running (tid=140234567890)
+[Parent] Thread 2 running (tid=140234567891)
+
+[Parent] PID=1234, threads in parent:
+  Thread count: 3
+
+[Child]  PID=1235, threads in child:
+  Thread count: 1
+[Child]  Only the thread that called fork() survives!
 ```
 
-> **สังเกต:** ค่าไม่เคยเป็น 0! และต่างกันทุกครั้ง! นี่คือ race condition
+> **สังเกต:** parent มี 3 thread (main + 2 workers) แต่ child มีแค่ **1 thread** เท่านั้น!
 
-> **คำถาม 3.1:** รัน 5 ครั้ง จดผลลัพธ์:
->
-> ```
-> ตอบ:
-> รอบ 1: counter =
-> รอบ 2: counter =
-> รอบ 3: counter =
-> รอบ 4: counter =
-> รอบ 5: counter =
->
-> ```
-
-### 3.2 ดู assembly จริง — พิสูจน์ว่า counter++ ไม่ใช่ atomic
-
-```bash
-gcc -S race.c -o race.s
-grep -A5 "counter" race.s | head -15
-```
-
-> **สังเกต:** จะเห็น `counter++` กลายเป็นหลายคำสั่ง assembly เช่น `movl`, `addl`, `movl` (load, add, store)
-
-> **คำถาม 3.2:** จาก assembly code ยืนยันหรือไม่ว่า `counter++` ไม่ใช่ atomic? มันเป็นกี่คำสั่ง machine?
+> **คำถาม 3.1:** child process มีกี่ thread? ทำไม Linux ไม่ copy ทุก thread ไปด้วย? (คิดว่าจะมีปัญหาอะไรถ้า copy ทุก thread)
 >
 > ```
 > ตอบ:
@@ -530,18 +513,121 @@ grep -A5 "counter" race.s | head -15
 >
 > ```
 
-### 3.3 ลดจำนวนรอบแล้วลองใหม่
+### 3.2 exec() ใน multithreaded program
 
-ลองแก้ `ITERATIONS` เป็น 100 แล้ว compile ใหม่:
+`exec()` จะ **replace ทั้ง process** — ทุก thread หายไปหมด ไม่ว่าจะมีกี่ thread ก็ถูกแทนที่ด้วยโปรแกรมใหม่
+
+> **กฎ:** fork() copy แค่ 1 thread, exec() ลบทุก thread แล้วเริ่มใหม่
+
+ลองดูด้วย strace ว่า fork กับ thread creation ใช้ system call อะไรบ้าง:
 
 ```bash
-# แก้ค่าใน race.c แล้ว compile
-sed 's/1000000/100/' race.c > race_small.c
-gcc -Wall race_small.c -o race_small -lpthread
-for i in 1 2 3 4 5; do ./race_small; done
+# ดู strace ของ fork+exec ใน multithreaded program
+strace -f -e trace=clone3,clone,execve ./thread_fork 2>&1 | grep -E "clone|exec"
 ```
 
-> **คำถาม 3.3:** เมื่อลดจำนวนรอบเป็น 100 ผลลัพธ์มักจะเป็น 0 บ่อยขึ้นหรือไม่? ทำไม?
+> **สังเกต:** จะเห็น `clone3(...)` ตอนสร้าง thread และ `clone(...)` หรือ `clone3(...)` ตอน fork — ทั้งคู่ใช้ clone เป็น base แต่ flags ต่างกัน (จะเรียนใน Part 4)
+
+> **คำถาม 3.2:** ถ้า multithreaded web server ต้อง fork+exec เพื่อรัน CGI script จะเกิดอะไรกับ worker threads อื่น ๆ ใน child?
+>
+> ```
+> ตอบ:
+>
+>
+> ```
+
+### 3.3 Signal ใน multithreaded program
+
+ใน Lab 5 เราเรียนว่า signal ถูกส่งไปที่ **process** — แต่ถ้า process มีหลาย thread **thread ไหนจะรับ signal?**
+
+**กฎของ Linux:**
+- **Synchronous signals** (เช่น SIGSEGV, SIGFPE) → ส่งไปที่ **thread ที่ทำให้เกิด**
+- **Asynchronous signals** (เช่น SIGINT, SIGTERM) → ส่งไปที่ **thread ใดก็ได้** ที่ไม่ได้ block signal นั้น
+
+สร้างไฟล์ `thread_signal.c`:
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <signal.h>
+#include <unistd.h>
+
+void handler(int sig) {
+    printf("  Signal %d received by thread %lu\n", sig, pthread_self());
+}
+
+void *worker(void *arg) {
+    int id = *(int *)arg;
+    printf("Thread %d: tid=%lu\n", id, pthread_self());
+
+    /* ทำงานวน loop */
+    for (int i = 0; i < 30; i++) {
+        usleep(500000);  /* 0.5 วินาที */
+    }
+    return NULL;
+}
+
+int main() {
+    /* ตั้ง handler สำหรับ SIGUSR1 */
+    struct sigaction sa = { .sa_handler = handler };
+    sigaction(SIGUSR1, &sa, NULL);
+
+    printf("Main thread: tid=%lu\n", pthread_self());
+    printf("PID=%d — ส่ง signal ด้วย: kill -USR1 %d\n\n", getpid(), getpid());
+
+    pthread_t t[3];
+    int ids[] = {1, 2, 3};
+
+    for (int i = 0; i < 3; i++)
+        pthread_create(&t[i], NULL, worker, &ids[i]);
+
+    /* รอให้ thread เริ่มแล้วบอก user ให้ส่ง signal */
+    sleep(1);
+    printf("\nNow send signals: kill -USR1 %d\n", getpid());
+    printf("Try sending multiple times and see which thread receives it\n\n");
+
+    for (int i = 0; i < 3; i++)
+        pthread_join(t[i], NULL);
+    return 0;
+}
+```
+
+```bash
+gcc -Wall thread_signal.c -o thread_signal -lpthread
+./thread_signal &
+```
+
+**เปิดอีก terminal แล้วส่ง signal หลายครั้ง:**
+
+```bash
+# ส่ง SIGUSR1 ไป 5 ครั้ง (แทน <PID> ด้วย PID จริง)
+for i in 1 2 3 4 5; do kill -USR1 $(pgrep thread_signal); sleep 1; done
+```
+
+> **สังเกต:** แต่ละครั้ง signal อาจถูกรับโดย **thread คนละตัว** — OS เลือกเอง!
+
+> **คำถาม 3.3:** signal ถูกรับโดย thread เดียวกันทุกครั้งหรือไม่? ทำไม? (อ้างอิงจากกฎที่เรียนไป)
+>
+> ```
+> ตอบ:
+>
+>
+> ```
+
+### 3.4 ส่ง signal ไปที่ thread เฉพาะด้วย `pthread_kill()`
+
+ปกติ `kill()` ส่ง signal ไปที่ **process** (OS เลือก thread ให้) แต่ `pthread_kill()` ส่งไปที่ **thread ที่ระบุ** ได้:
+
+```c
+pthread_kill(thread_id, SIGUSR1);  /* ส่ง SIGUSR1 ไปที่ thread ที่ระบุ */
+```
+
+| API | ส่ง signal ไปที่ | ใครรับ? |
+|---|---|---|
+| `kill(pid, sig)` | Process | thread ใดก็ได้ (OS เลือก) |
+| `pthread_kill(tid, sig)` | Thread ที่ระบุ | thread ที่ระบุเท่านั้น |
+
+> **คำถาม 3.4:** ถ้าต้องการให้ main thread เป็นคนรับ signal ทุกครั้ง มีวิธีไหนบ้าง? (hint: มี 2 วิธี)
 >
 > ```
 > ตอบ:
@@ -551,94 +637,160 @@ for i in 1 2 3 4 5; do ./race_small; done
 
 ---
 
-## Part 4 — แก้ Race Condition ด้วย Mutex
+## Part 4 — Linux Threads ภายใน: clone() System Call
 
-### Mutex คืออะไร?
+ในสไลด์เราเรียนว่า Linux ไม่ได้แยก "process" กับ "thread" จริง ๆ — ภายใน kernel ทุกอย่างเป็น **task** ที่สร้างด้วย `clone()` system call ตัวเดียวกัน! สิ่งที่ต่างคือ **flags** ที่บอกว่าจะ share อะไรบ้าง
 
-**Mutex** (Mutual Exclusion) เหมือน **กุญแจห้องน้ำ** — มีแค่ดอกเดียว ใครถือกุญแจถึงจะเข้าได้ คนอื่นต้องรอ
+### 4.1 เปรียบเทียบ clone() flags ของ fork vs thread
+
+| Flag | ความหมาย | fork() | pthread_create() |
+|---|---|---|---|
+| `CLONE_VM` | share memory space | ไม่ใช้ (copy memory) | **ใช้** |
+| `CLONE_FILES` | share open files | ไม่ใช้ (copy file table) | **ใช้** |
+| `CLONE_SIGHAND` | share signal handlers | ไม่ใช้ (copy) | **ใช้** |
+| `CLONE_FS` | share filesystem info | ไม่ใช้ (copy) | **ใช้** |
+| `CLONE_THREAD` | อยู่ใน thread group เดียวกัน | ไม่ใช้ | **ใช้** |
+
+> **สรุป:** fork() = clone() **ไม่ share** อะไรเลย, pthread_create() = clone() **share ทุกอย่าง**
+
+### 4.2 strace ดู clone() จริง — fork vs thread
+
+ลองใช้โปรแกรมจาก Part 1 (`thread_observe`) เปรียบเทียบกับ fork:
+
+```bash
+# ดู clone flags ตอนสร้าง thread
+strace -f -e trace=clone3,clone ./thread_observe 2>&1 | head -10
+```
+
+ตัวอย่างผลลัพธ์:
 
 ```
-  Thread A                          Thread B
-  ──────────────────                ──────────────────
-  lock(mutex)   ← ได้กุญแจ!
-  ┌─────────────────┐
-  │ counter++       │               lock(mutex)  ← กุญแจไม่ว่าง...
-  │ (critical       │                              รอ...
-  │  section)       │                              รอ...
-  └─────────────────┘
-  unlock(mutex) ← คืนกุญแจ
-                                    lock(mutex)  ← ได้กุญแจแล้ว!
-                                    ┌─────────────────┐
-                                    │ counter--       │
-                                    │ (critical       │
-                                    │  section)       │
-                                    └─────────────────┘
-                                    unlock(mutex)
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|...}, ...) = 1235
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|...}, ...) = 1236
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|...}, ...) = 1237
 ```
 
-**Critical section** = ส่วนของโค้ดที่ **เข้าได้ทีละ 1 thread เท่านั้น**
+> **สังเกต:** `pthread_create()` ภายในเรียก `clone3()` พร้อม flags `CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD` — share ทุกอย่าง!
 
-### 4.1 แก้ race condition ด้วย mutex
+ลองเปรียบเทียบกับ fork:
 
-สร้างไฟล์ `race_fixed.c` (โค้ดเหมือน `race.c` แต่เพิ่ม mutex):
+```bash
+# สร้างโปรแกรมง่าย ๆ ที่ fork
+echo '#include <unistd.h>
+#include <sys/wait.h>
+int main() { if(fork()==0) _exit(0); wait(0); return 0; }' > fork_test.c
+gcc fork_test.c -o fork_test
+
+strace -f -e trace=clone3,clone ./fork_test 2>&1 | head -5
+```
+
+> **สังเกต:** fork() ใช้ `clone3()` หรือ `clone()` เช่นกัน **แต่ flags ต่างกัน** — ไม่มี `CLONE_VM`, `CLONE_THREAD`
+
+> **คำถาม 4.1:** flags ของ `clone()` ตอนสร้าง thread ต่างจาก fork() อย่างไร? flag ไหนที่ทำให้ thread share memory กัน?
+>
+> ```
+> ตอบ:
+>
+>
+> ```
+
+### 4.3 ดู task_struct ผ่าน /proc — thread กับ process ต่างกันอย่างไร?
+
+ใน kernel ทุก thread มี `task_struct` ของตัวเอง — แต่ thread ใน process เดียวกันจะ **ชี้ไปที่ data structure เดียวกัน** (เช่น memory map, file table)
+
+ลองเปรียบเทียบข้อมูลของ thread ใน process เดียวกัน:
+
+```bash
+# รัน thread_observe อยู่ background (จาก Part 1)
+./thread_observe &
+PID=$!
+
+echo "=== เปรียบเทียบ thread ใน process เดียวกัน ==="
+for tid in $(ls /proc/$PID/task/); do
+    echo "--- TID: $tid ---"
+    # ดู PID, TGID (Thread Group ID), และ VmSize (memory)
+    grep -E "^(Pid|Tgid|VmSize|Threads)" /proc/$PID/task/$tid/status
+    echo
+done
+```
+
+> **สังเกต:**
+> - ทุก thread มี `Tgid` (Thread Group ID) เหมือนกัน = PID ของ process
+> - ทุก thread มี `VmSize` เท่ากัน — เพราะ share address space เดียวกัน
+> - แต่ `Pid` (ในที่นี้คือ TID) ต่างกัน
+
+ลองดู file descriptors ที่ share กัน:
+
+```bash
+# ดู file descriptors — ทุก thread เห็นเหมือนกัน
+echo "=== FD ของ thread ต่าง ๆ ==="
+FIRST_TID=$(ls /proc/$PID/task/ | head -1)
+LAST_TID=$(ls /proc/$PID/task/ | tail -1)
+echo "Thread $FIRST_TID:" && ls /proc/$PID/task/$FIRST_TID/fd
+echo "Thread $LAST_TID:" && ls /proc/$PID/task/$LAST_TID/fd
+```
+
+> **สังเกต:** file descriptors ของทุก thread เหมือนกัน — เพราะ `CLONE_FILES` ทำให้ share file table
+
+> **คำถาม 4.2:** ทำไม thread ทุกตัวถึงมี `VmSize` เท่ากัน? แล้ว `Tgid` กับ `Pid` ต่างกันอย่างไร?
+>
+> ```
+> ตอบ:
+>
+>
+> ```
+
+### 4.4 Concurrency vs Parallelism — สังเกตจริงบนเครื่อง
+
+**Concurrency** = หลาย task ทำงาน "สลับกัน" (interleaving) — แม้มี CPU เดียวก็ทำได้
+**Parallelism** = หลาย task ทำงาน "พร้อมกันจริง ๆ" — ต้องมีหลาย CPU cores
+
+```bash
+# ดูจำนวน CPU cores
+nproc
+```
+
+ลองสร้างโปรแกรมที่ใช้หลาย thread แล้วดูว่าทำงานบน core ไหน:
 
 ```c
+/* thread_cores.c */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
 
-#define ITERATIONS 1000000
-
-int counter = 0;
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
-void *increment(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++) {
-        pthread_mutex_lock(&lock);    /* เข้า critical section */
-        counter++;
-        pthread_mutex_unlock(&lock);  /* ออก critical section */
-    }
-    return NULL;
-}
-
-void *decrement(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++) {
-        pthread_mutex_lock(&lock);
-        counter--;
-        pthread_mutex_unlock(&lock);
+void *worker(void *arg) {
+    int id = *(int *)arg;
+    for (int i = 0; i < 5; i++) {
+        printf("Thread %d running on CPU core %d\n", id, sched_getcpu());
+        usleep(100000);
     }
     return NULL;
 }
 
 int main() {
-    pthread_t t1, t2;
+    printf("System has %d CPU cores\n\n", (int)sysconf(_SC_NPROCESSORS_ONLN));
 
-    printf("Using MUTEX to protect counter\n");
+    pthread_t t[4];
+    int ids[] = {1, 2, 3, 4};
 
-    pthread_create(&t1, NULL, increment, NULL);
-    pthread_create(&t2, NULL, decrement, NULL);
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
-
-    printf("Expected: 0\n");
-    printf("Actual:   %d\n", counter);
-    printf("Result:   %s\n", counter == 0 ? "CORRECT — mutex works!" : "WRONG");
+    for (int i = 0; i < 4; i++)
+        pthread_create(&t[i], NULL, worker, &ids[i]);
+    for (int i = 0; i < 4; i++)
+        pthread_join(t[i], NULL);
     return 0;
 }
 ```
 
 ```bash
-gcc -Wall race_fixed.c -o race_fixed -lpthread
+gcc -Wall thread_cores.c -o thread_cores -lpthread
+./thread_cores
 ```
 
-**ลองรัน 5 ครั้ง:**
+> **สังเกต:** thread แต่ละตัวอาจทำงานบน **core ต่างกัน** (parallelism) หรือ **core เดียวกัน** (concurrency) — ขึ้นอยู่กับ OS scheduler และจำนวน cores
 
-```bash
-for i in 1 2 3 4 5; do echo "--- Run $i ---"; ./race_fixed; done
-```
-
-> **สังเกต:** ผลลัพธ์เป็น 0 **ทุกครั้ง**!
-
-> **คำถาม 4.1:** ผลลัพธ์เป็น 0 ทุกครั้งหรือไม่? เปรียบเทียบกับ `race.c` ที่ไม่มี mutex
+> **คำถาม 4.3:** thread ทั้ง 4 ตัวทำงานบน core เดียวกันหรือต่างกัน? ถ้าเครื่องมีแค่ 1 core จะเกิดอะไรขึ้น?
 >
 > ```
 > ตอบ:
@@ -646,59 +798,7 @@ for i in 1 2 3 4 5; do echo "--- Run $i ---"; ./race_fixed; done
 >
 > ```
 
-### 4.2 Trade-off: ถูกต้องแต่ช้าลง
-
-Mutex ทำให้ **ถูกต้อง** แต่มี **ค่าใช้จ่าย** — เพราะ thread ต้องรอกัน ลองวัด:
-
-```bash
-echo "=== Without mutex ==="
-time ./race
-
-echo ""
-echo "=== With mutex ==="
-time ./race_fixed
-```
-
-> **สังเกต:** `race_fixed` **ช้ากว่า** `race` อย่างเห็นได้ชัด
-
-> **คำถาม 4.2:** โปรแกรมที่ใช้ mutex ช้ากว่ากี่เท่า? ทำไม?
->
-> ```
-> ตอบ:
->
->
-> ```
-
-> **คำถาม 4.3:** นี่คือ trade-off ระหว่างอะไรกับอะไร?
->
-> ```
-> ตอบ:
->
->
-> ```
-
-### 4.3 Mutex API สรุป
-
-| API | หน้าที่ | เปรียบเทียบ |
-|---|---|---|
-| `pthread_mutex_init(&lock, NULL)` | สร้าง mutex | เตรียมกุญแจ |
-| `pthread_mutex_lock(&lock)` | lock — เข้า critical section | หยิบกุญแจ เข้าห้องน้ำ |
-| `pthread_mutex_unlock(&lock)` | unlock — ออก critical section | คืนกุญแจ ออกจากห้องน้ำ |
-| `pthread_mutex_destroy(&lock)` | ทำลาย mutex | ทิ้งกุญแจ |
-
-> **กฎสำคัญ:**
-> 1. ทุกครั้งที่ `lock` ต้อง `unlock` ด้วย — ถ้าลืม unlock จะ **deadlock** (thread อื่นรอตลอดกาล)
-> 2. Critical section ควร **สั้นที่สุด** — อย่า lock แล้วทำงานนาน thread อื่นจะรอนาน
-
-### 4.4 ใช้ strace ดู mutex ทำงาน
-
-```bash
-strace -f -e trace=futex ./race_fixed 2>&1 | tail -20
-```
-
-> **สังเกต:** จะเห็น `futex(...)` เยอะมาก — `futex` คือ system call ที่ Linux ใช้ implement mutex (Fast Userspace muTEX)
-
-> **คำถาม 4.4:** `futex` system call เกี่ยวข้องกับ mutex อย่างไร?
+> **คำถาม 4.4:** อธิบายความแตกต่างระหว่าง concurrency กับ parallelism ด้วยคำพูดของตัวเอง
 >
 > ```
 > ตอบ:
@@ -807,7 +907,9 @@ Fork is 6.0x slower than thread
 | `ps -T -p <PID>` | แสดง thread ของ process ที่ระบุ |
 | `htop` + กด `H` | ดู thread แบบ real-time |
 | `/proc/<PID>/task/` | โฟลเดอร์ของ thread แต่ละตัว |
-| `strace -f -e trace=futex` | ดู mutex system calls |
+| `strace -f -e trace=clone3,clone` | ดู clone() system call ตอนสร้าง thread/process |
+| `nproc` | ดูจำนวน CPU cores |
+| `sched_getcpu()` | ดูว่า thread ทำงานบน core ไหน |
 
 ### Pthreads API
 
@@ -815,8 +917,8 @@ Fork is 6.0x slower than thread
 |---|---|---|
 | `pthread_create(&tid, NULL, func, arg)` | สร้าง thread ใหม่ | เหมือน `fork()` |
 | `pthread_join(tid, &retval)` | รอ thread ทำงานเสร็จ | เหมือน `wait()` |
-| `pthread_mutex_lock(&lock)` | lock (เข้า critical section) | — |
-| `pthread_mutex_unlock(&lock)` | unlock (ออก critical section) | — |
+| `pthread_kill(tid, sig)` | ส่ง signal ไปที่ thread ที่ระบุ | เหมือน `kill(pid, sig)` |
+| `pthread_self()` | ดู thread ID ของตัวเอง | เหมือน `getpid()` |
 
 ### Compile Flag
 
@@ -835,7 +937,8 @@ gcc -Wall program.c -o program -lpthread
 1. **Thread** คือหน่วยการทำงานที่เบากว่า process — มี stack, registers, PC ของตัวเอง แต่ **share code, data, heap** กับ thread อื่นใน process เดียวกัน
 2. ดู thread จริงในระบบได้ด้วย `ps -T`, `htop`, `/proc/<PID>/task/`
 3. Thread **share memory** กัน — ต่างจาก fork() ที่แยก memory คนละชุด
-4. **Race condition** เกิดเมื่อหลาย thread แก้ไข shared variable พร้อมกัน — เพราะ `counter++` ไม่ใช่ atomic (เป็น 3 machine instructions)
-5. **Mutex** แก้ race condition โดยให้ thread เข้า critical section ได้ทีละ 1 ตัว — แต่มี trade-off คือ **ช้าลง**
-6. การสร้าง thread **เร็วกว่า** fork หลายเท่า — เพราะไม่ต้อง copy address space
-7. **Thread เหมาะสำหรับงาน share ข้อมูล**, **Process เหมาะสำหรับงานที่ต้องการ isolation**
+4. **Threading Issues:** `fork()` ใน multithreaded program จะ copy แค่ thread ที่เรียก, `exec()` จะ replace ทั้ง process, signal อาจถูกรับโดย thread ใดก็ได้
+5. **Linux ใช้ `clone()` system call** สร้างทั้ง process และ thread — ต่างกันที่ **flags** (CLONE_VM, CLONE_THREAD ฯลฯ)
+6. **Concurrency** คือหลาย task สลับทำงาน, **Parallelism** คือทำงานพร้อมกันจริงบนหลาย cores
+7. การสร้าง thread **เร็วกว่า** fork หลายเท่า — เพราะไม่ต้อง copy address space
+8. **Thread เหมาะสำหรับงาน share ข้อมูล**, **Process เหมาะสำหรับงานที่ต้องการ isolation**
