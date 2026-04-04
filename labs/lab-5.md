@@ -294,7 +294,7 @@ ps aux | wc -l
 ps aux | awk '{print $8}' | sort | uniq -c | sort -rn
 ```
 
-> **คำถาม 2.1:** state ไหนมีจำนวน process มากที่สุด? ทำไม? (Hint: process ส่วนใหญ่ทำงานแล้วก็นอนรอ event)
+> **คำถาม 2.1:** state ไหนมีจำนวน process มากที่สุด? ทำไม? 
 >
 > ```
 > ตอบ:
