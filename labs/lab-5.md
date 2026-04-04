@@ -429,13 +429,15 @@ pattern `fork → exec → wait` นี้สำคัญมาก — เป็
 `strace` คือเครื่องมือที่แสดง **ทุก system call** ที่ process เรียก เราจะใช้มันพิสูจน์ว่า bash ใช้ fork → exec → wait จริง:
 
 ```bash
-strace -f -e trace=clone,execve,wait4 bash -c "ls /tmp"
+strace -f -e trace=clone,execve,wait4 bash -c "ls /tmp; true"
 ```
 
 อธิบาย option:
 - `-f` = ติดตาม child process ด้วย
 - `-e trace=clone,execve,wait4` = แสดงเฉพาะ system call ที่เราสนใจ
-- `bash -c "ls /tmp"` = เปิด bash ใหม่ แล้วรันคำสั่ง `ls /tmp`
+- `bash -c "ls /tmp; true"` = เปิด bash ใหม่ แล้วรัน `ls /tmp` ตามด้วย `true`
+
+> **ทำไมต้องมี `; true`?** ถ้ามีคำสั่งเดียว bash จะ optimize โดย exec ทับตัวเองเลยโดยไม่ fork child ใหม่ การเพิ่ม `; true` บังคับให้ bash ต้อง fork จริงๆ เพราะยังมีคำสั่งถัดไปต้องทำ
 
 > **สังเกต:** ใน output จะเห็น:
 > 1. `clone(...)` — bash สร้าง child (clone คือ fork เวอร์ชัน Linux)
