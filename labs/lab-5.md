@@ -7,7 +7,7 @@
 2. ใช้คำสั่ง Linux (`ps`, `pstree`, `top`, `strace`) สำรวจ process จริงในระบบได้
 3. เข้าใจ process states และสังเกตได้จาก `/proc`
 4. เข้าใจ `fork()`, `exec()`, `wait()` ผ่าน snippet เล็ก ๆ และ `strace`
-5. เข้าใจปัญหา zombie / orphan process
+5. เข้าใจปัญหา zombie process
 6. เข้าใจ IPC (pipe) จากคำสั่ง shell ที่ใช้กันทุกวัน
 
 ---
@@ -696,60 +696,6 @@ ps aux | grep Z | grep -v grep
 >
 > ```
 
-### Orphan Process คืออะไร?
-
-**Orphan** เกิดเมื่อ parent terminate **ก่อน** child — child กลายเป็น "เด็กกำพร้า"
-
-```
-  เวลา ──────────────────────────────────────→
-
-  Parent:  fork()───→ exit()
-                │        │
-                │        └── parent ตายแล้ว!
-                │
-  Child:        └────────────→ ทำงานต่อ... ───→ ใครเป็น parent?
-                                                     │
-                                                     ▼
-                                              systemd (PID 1)
-                                              รับเลี้ยงอัตโนมัติ!
-```
-
-ใน Linux เมื่อ parent ตาย **systemd (PID 1) จะรับเป็น parent ใหม่** ให้ child อัตโนมัติ
-
-### 4.2 สร้าง orphan จาก shell
-
-```bash
-bash -c '
-    echo "Parent PID = $$, exiting now..."
-    bash -c "
-        echo \"Child started, parent = \$PPID\"
-        sleep 3
-        echo \"Child after 3s, parent = \$(cat /proc/self/status | grep PPid)\"
-    " &
-'
-# รอ 4 วินาทีแล้วจะเห็น output ของ child
-sleep 4
-```
-
-> **สังเกต:** PPid เปลี่ยนจาก PID ของ parent เดิม ไปเป็น PID 1 (systemd)
-
-> **คำถาม 4.3:** หลังจาก parent ตาย PPid ของ child เปลี่ยนเป็นอะไร? ทำไม?
->
-> ```
-> ตอบ:
->
->
-> ```
-
-> **คำถาม 4.4:** เปรียบเทียบ zombie กับ orphan:
-> - อันไหนอันตรายกว่า?
-> - OS จัดการอันไหนได้อัตโนมัติ?
->
-> ```
-> ตอบ:
->
->
-> ```
 
 ---
 
