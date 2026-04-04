@@ -186,7 +186,7 @@ echo "My shell PID = $$"
 
 ```bash
 echo "Shell PID = $$"
-ps -p $$
+bash -c 'echo "Command PID = $$, Parent PID = $PPID"'
 ```
 
 ### 1.4 สำรวจ /proc filesystem
