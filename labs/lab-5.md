@@ -457,11 +457,11 @@ strace -f -e trace=clone,execve,wait4 bash -c "ls /tmp; true"
 ลองดูว่าเกิดอะไรเมื่อใช้ pipe:
 
 ```bash
-strace -f -e trace=clone,execve,pipe,dup2,wait4 bash -c "ls | grep .c" 2>&1 | head -30
+strace -f -e trace=clone,execve,pipe2,dup2,wait4 bash -c "ls | grep .c" 2>&1 | head -30
 ```
 
 > **สังเกต:** จะเห็น:
-> 1. `pipe(...)` — bash สร้าง pipe ก่อน
+> 1. `pipe2(...)` — bash สร้าง pipe ก่อน (Linux ใช้ `pipe2` แทน `pipe` ธรรมดา)
 > 2. `clone(...)` — สร้าง child ตัวแรก (ls)
 > 3. `clone(...)` — สร้าง child ตัวที่สอง (grep)
 > 4. `dup2(...)` — redirect stdout ของ ls เข้า pipe, redirect stdin ของ grep ออกจาก pipe
