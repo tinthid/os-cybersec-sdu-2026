@@ -66,7 +66,7 @@ top -bn1 | head -15
 จาก output:
 - process ที่ใช้ CPU สูงสุดคืออะไร? ทำไมถึงใช้ CPU มาก?
 - process ที่มี state `S` หมายความว่ากำลังทำอะไร?
-- ถ้าเห็น process ที่มี `STAT` เป็น `Ss` ตัว `s` ตัวเล็กหมายความว่าอะไร? (Hint: `man ps` แล้วดู PROCESS STATE CODES)
+- ใน column `STAT` จะเห็นตัวอักษรหลายตัวต่อกัน เช่น `Ssl`, `Ss+` — ตัวแรกคือ state หลัก ตัวที่ตามมาคือ flag เพิ่มเติม ลอง `man ps` แล้วดู PROCESS STATE CODES แล้วอธิบายว่า `s`, `l`, `+` แต่ละตัวหมายความว่าอะไร?
 
 > ```
 > ตอบ:
@@ -109,9 +109,7 @@ strace -f -e trace=clone,pipe2,dup2,execve,wait4 bash -c "cat /etc/passwd | grep
 >
 > ```
 
-**2.4)** Zombie & Orphan — ทำการทดลองต่อไปนี้:
-
-**ทดลอง A: สร้าง zombie**
+**2.4)** Zombie Process — ทำการทดลองต่อไปนี้:
 
 Terminal 1:
 ```bash
@@ -128,29 +126,11 @@ Terminal 2 (รันภายใน 15 วินาที):
 ps aux | grep Z | grep -v grep
 ```
 
-**ทดลอง B: สร้าง orphan**
-
-```bash
-bash -c '
-    echo "Parent PID = $$"
-    bash -c "
-        echo \"Child: my parent = \$PPID\"
-        sleep 3
-        echo \"Child: my parent now = \$(cat /proc/self/status | grep PPid)\"
-    " &
-'
-sleep 4
-```
-
-วาง output ของทั้ง 2 ทดลอง แล้วตอบ:
-
-| | Zombie | Orphan |
-|---|---|---|
-| เกิดจากอะไร? | | |
-| ใช้ CPU/memory ไหม? | | |
-| OS จัดการเองได้ไหม? | | |
-| อันตรายอย่างไร? | | |
-| วิธีป้องกัน? | | |
+วาง output แล้วตอบ:
+- zombie process เกิดจากอะไร?
+- zombie ใช้ CPU/memory ไหม? แล้วทำไมถึงยังเป็นปัญหา?
+- หลังครบ 15 วินาที ลองรัน `ps aux | grep Z` อีกครั้ง — zombie หายไปหรือไม่? เพราะอะไร?
+- ในฐานะ programmer จะป้องกันไม่ให้เกิด zombie ได้อย่างไร?
 
 > ```
 > ตอบ:
