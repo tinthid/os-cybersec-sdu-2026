@@ -359,23 +359,4 @@ int main() {
 >
 > ```
 
-**5.3)** วาดแผนภาพแสดง **life cycle** ของ process ตั้งแต่ `fork()` จนถึง `exit()` โดยรวมทุกสิ่งที่เรียนมา:
-
-แสดงให้เห็น:
-1. Parent เรียก `fork()` -> เกิด child process
-2. Child เรียก `exec()` -> โหลดโปรแกรมใหม่
-3. Child ทำงาน -> เปลี่ยน state ระหว่าง Ready / Running / Waiting
-4. Child เรียก `exit()` -> กลายเป็น zombie
-5. Parent เรียก `wait()` -> zombie ถูก cleanup
-6. (กรณี parent ไม่เรียก wait -> zombie ค้าง)
-7. (กรณี parent ตายก่อน -> child กลายเป็น orphan -> systemd รับเลี้ยง)
-
-วาดเป็นแผนภาพ 1 แผ่น ใช้ ASCII art หรือวาดมือแล้วถ่ายรูปแนบก็ได้
-
-> ```
-> ตอบ:
->
->
-> ```
-
 ---
