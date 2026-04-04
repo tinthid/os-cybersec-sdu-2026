@@ -225,7 +225,6 @@ ps -T -p <PID>
 วาง output แล้วตอบ:
 - thread ทั้งหมดมี PID เหมือนกันหรือไม่?
 - SPID (Thread ID) ต่างกันหรือไม่?
-- ผลลัพธ์นี้สอดคล้องกับที่เรียนในแลปอย่างไร?
 
 > ```
 > ตอบ:
@@ -277,9 +276,6 @@ strace -f -e trace=clone3,clone ./thread_demo 2>&1 | head -10
 ตอบคำถามเรียงตามลำดับ:
 1. Zombie process เกิดจากอะไร?
 2. ทำไมมี zombie เยอะแล้วสร้าง process ใหม่ไม่ได้?
-3. คุณจะใช้คำสั่งอะไรหา **parent** ของ zombie เหล่านั้น?
-4. จะแก้ปัญหาเฉพาะหน้าอย่างไร?
-5. จะป้องกันไม่ให้เกิดซ้ำอย่างไร? (ด้าน programming)
 
 > ```
 > ตอบ:
@@ -312,7 +308,7 @@ strace -f -e trace=clone3,clone ./thread_demo 2>&1 | head -10
 
 **4.3)** พิจารณา scenario ต่อไปนี้:
 
-> นักศึกษาเขียน kernel module ที่ `register_keyboard_notifier()` เพื่อดักจับ keystroke ทุกปุ่ม แล้วส่งข้อมูลออกไปยัง server ภายนอกผ่าน network
+> ถ้ามีการเขียน Kernel module ที่ `register_keyboard_notifier()` เพื่อดักจับ keystroke ทุกปุ่ม แล้วส่งข้อมูลออกไปยัง server ภายนอกผ่าน network
 
 ตอบคำถาม:
 1. Module นี้ถือว่าเป็น **keylogger** หรือไม่? ทำไม?
