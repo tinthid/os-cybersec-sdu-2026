@@ -1,4 +1,4 @@
-# Assignment 2: ทบทวน Lab 4–6 [Due Date: TBD]
+# Assignment 2: ทบทวน Lab 4–6 [Due Date: 18/04/2026]
 ---
 
 ## ข้อ 1 — Kernel Module (Lab 4)
